@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# Klipper build artifacts
+out/
+*.elf
+*.o
+*.d
+
+# Allow repository firmware and DWIN binaries
+*.bin
+!DWIN_SET/*.bin
+!mcu_firmware/*.bin
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+*~
+*.swp
+.vscode/
+.idea/
