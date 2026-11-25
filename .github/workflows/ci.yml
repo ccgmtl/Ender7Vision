@@ -1,0 +1,79 @@
+name: Ender7Vision CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  lint-and-validate:
+    name: Lint & DWIN Asset Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install Pillow flake8
+
+      - name: Check Python Syntax (py_compile)
+        run: |
+          python -m py_compile klipper_extension/klippy/extras/t5uid1/*.py
+          python -m py_compile tools/*.py
+
+      - name: Validate DWIN ICL Generator
+        run: |
+          python tools/build_dwin_set.py "v1.1.0-ci"
+          test -s DWIN_SET/32_screens.icl
+          echo "Verified DWIN_SET/32_screens.icl exists and is non-empty."
+
+      - name: Verify DWIN_SET File Integrity
+        run: |
+          ls -lh DWIN_SET/
+          test -f DWIN_SET/T5LCFG.CFG
+          test -f DWIN_SET/13TouchFile.bin
+          test -f DWIN_SET/14ShowFile.bin
+          test -f DWIN_SET/32_screens.icl
+
+  mcu-build-check:
+    name: Klipper MCU Firmware Build Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install ARM Embedded Toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-none-eabi binutils-arm-none-eabi libnewlib-arm-none-eabi make
+
+      - name: Clone Upstream Klipper
+        run: |
+          git clone --depth 1 https://github.com/Klipper3d/klipper.git $HOME/klipper
+
+      - name: Run Ender7Vision Installer
+        run: |
+          chmod +x install.sh
+          KLIPPER_DIR=$HOME/klipper ./install.sh
+
+      - name: Build MCU Firmware
+        run: |
+          cd $HOME/klipper
+          cp $GITHUB_WORKSPACE/mcu_firmware/klipper_mcu.config .config
+          make olddefconfig
+          make -j$(nproc)
+          test -f out/klipper.bin
+          echo "Successfully built out/klipper.bin ($(stat -c%s out/klipper.bin) bytes)"

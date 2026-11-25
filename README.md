@@ -14,6 +14,26 @@
 
 ---
 
+## ✨ Features (v1.1.0 Release)
+
+* **Real-Time Mini-Bed Toolpath Radar (Option A):**
+  * Displays a 90×90 pixel scaled viewport (X=35..125, Y=145..235) representing the 250×250 mm Ender 7 print bed on the active print status screen.
+  * Real-time cursor movement updates directly from Klipper's toolhead coordinates without serial stutter or MCU buffer overrun.
+* **Interactive Bed Tramming Helper (Feature 1):**
+  * Integrates Klipper's `[screws_tilt_adjust]` with the DWIN manual leveling screen.
+  * One-touch probe button executes `CALCULATE_BED_TRAMMING` and prints exact corner screw turns (e.g. `CW 01:15` or `BASE`) directly on the screen.
+* **Full Slicer & Job Telemetry (Feature 3):**
+  * Displays live `Layer X of Y` tracking parsed from slicer object stats.
+  * Total filament consumed in meters and real-time print velocity metrics.
+* **CoreXY Speed Presets (Feature 5):**
+  * **Quiet / Eco:** 100 mm/s max velocity, 1,500 mm/s² acceleration.
+  * **Standard:** 180 mm/s max velocity, 3,000 mm/s² acceleration.
+  * **Sport:** 250 mm/s max velocity, 4,000 mm/s² acceleration (optimized for the Ender 7 CoreXY linear rail kinematics).
+* **Automated CI/CD Workflows (Feature 7):**
+  * GitHub Actions automated Python linting, DWIN ICL asset building, and headless MCU firmware compilation against upstream Klipper.
+
+---
+
 ## ⚡ Overview & Architecture
 
 **Ender7Vision** restores the factory color touchscreen on the **Creality Ender 7** using native, in-tree Klipper routines. It operates **100% daemon-less**—meaning no external background Python bridges, no pseudo-terminals (`/tmp/ttyDWIN`), and zero overhead. Klipper communicates directly with the DWIN display ASIC over the motherboard's dedicated serial bus.

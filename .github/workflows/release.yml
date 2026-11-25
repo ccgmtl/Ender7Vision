@@ -1,0 +1,64 @@
+name: Ender7Vision Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build Release Assets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install Pillow
+
+      - name: Build Tagged DWIN_SET ICL
+        run: |
+          python tools/build_dwin_set.py "${{ github.ref_name }}"
+
+      - name: Package DWIN_SET Archive
+        run: |
+          zip -r "DWIN_SET_${{ github.ref_name }}.zip" DWIN_SET/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Ender7Vision ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          files: |
+            DWIN_SET_${{ github.ref_name }}.zip
+            mcu_firmware/klipper_ender7_usart2.bin
+            mcu_firmware/klipper_mcu.config
+            config/DGUS-Reloaded.cfg
+          body: |
+            # Ender7Vision ${{ github.ref_name }} Release
+            
+            Native DWIN DGUS II Touchscreen support for the Creality Ender 7 running Klipper.
+            
+            ### ✨ What's New in v1.1.0:
+            * **Real-Time Mini-Bed Toolpath Radar (Option A):** Scaled 250×250mm build plate viewport on the printing status screen showing live nozzle position with zero host lag.
+            * **Interactive Bed Tramming Helper (Feature 1):** One-touch `SCREWS_TILT_CALCULATE` integration displaying exact screw adjustments (`CW`/`CCW`) on the display.
+            * **Slicer & Job Telemetry (Feature 3):** Live `Layer X of Y` tracking, filament extruded distance, and elapsed/remaining stats.
+            * **CoreXY Speed Presets (Feature 5):** Instant toggles between Quiet (100 mm/s), Standard (180 mm/s), and Sport (250 mm/s) modes.
+            * **Automated CI/CD Workflow (Feature 7):** Automated linting, asset compiling, and MCU validation pipeline.
+            
+            ### 📦 Flashing & Rollout:
+            1. **Display:** Unzip `DWIN_SET_${{ github.ref_name }}.zip`, copy `DWIN_SET` to a FAT32 (4096-byte cluster) microSD card, insert into the screen's rear slot, and boot printer until `END !` appears.
+            2. **Host:** Run `./install.sh` on your Klipper host or pull the updated `DGUS-Reloaded.cfg` and `t5uid1` extension.
+            3. **MCU:** If updating from earlier versions, flash `klipper_ender7_usart2.bin` via the front SD card.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

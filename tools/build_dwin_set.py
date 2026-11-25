@@ -89,4 +89,9 @@ def build_screens_icl(bmp_dir: str, out_icl_path: str, version_tag: str = "v2.3.
     print(f"Built {out_icl_path} ({len(full_file)} bytes, CRC={hex(crc)}, banner='{stamp_text}')")
 
 if __name__ == "__main__":
-    print("Ender 7 DWIN_SET builder script archived.")
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    bmp_dir = os.path.join(repo_root, "tools", "raw_480x272_bmps")
+    out_path = os.path.join(repo_root, "DWIN_SET", "32_screens.icl")
+    version = sys.argv[1] if len(sys.argv) > 1 else "v1.1.0"
+    build_screens_icl(bmp_dir, out_path, version_tag=version)
+
