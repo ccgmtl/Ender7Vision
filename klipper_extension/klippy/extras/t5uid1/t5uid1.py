@@ -3,7 +3,7 @@
 # Copyright (C) 2020  Desuuuu <contact@desuuuu.com>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
-import os, logging, struct, textwrap
+import os, logging, struct, textwrap, collections
 import jinja2
 import mcu
 from . import var, page, routine, dgus_reloaded
@@ -41,6 +41,14 @@ CONTROL_TYPES = {
     'firmware_settings':   0x07
 }
 
+PROBED_MATRIX_POINTS = (
+    0,  1,  2,  3,  4,
+    9,  8,  7,  6,  5,
+   10, 11, 12, 13, 14,
+   19, 18, 17, 16, 15,
+   20, 21, 22, 23, 24,
+)
+
 def map_value_range(x, in_min, in_max, out_min, out_max):
     return int(round((x - in_min)
                      * (out_max - out_min)
@@ -48,25 +56,26 @@ def map_value_range(x, in_min, in_max, out_min, out_max):
                      + out_min))
 
 def get_duration(seconds):
-    if type(seconds) is not int:
-        seconds = int(seconds)
-    if seconds < 0:
-        seconds = 0
-    minutes = seconds // 60
-    hours = minutes // 60
-    days = hours // 24
+    if not isinstance(seconds, int):
+        try:
+            seconds = int(seconds)
+        except (ValueError, TypeError):
+            seconds = 0
+    if seconds <= 0:
+        return "0s"
+    days, rem = divmod(seconds, 86400)
+    hours, rem = divmod(rem, 3600)
+    minutes, secs = divmod(rem, 60)
     days %= 365
-    hours %= 24
-    minutes %= 60
-    seconds %= 60
-    result = str(seconds) + "s"
-    if minutes:
-        result = str(minutes) + "m " + result
-    if hours:
-        result = str(hours) + "h " + result
+    parts = []
     if days:
-        result = str(days) + "d " + result
-    return result
+        parts.append(f"{days}d")
+    if hours:
+        parts.append(f"{hours}h")
+    if minutes:
+        parts.append(f"{minutes}m")
+    parts.append(f"{secs}s")
+    return " ".join(parts)
 
 def bitwise_and(lhs, rhs):
     return lhs & rhs
@@ -157,7 +166,11 @@ class T5UID1:
         self._status_data = {}
         self._vars = {}
         self._pages = {}
+        self._page_id_to_name = {}
         self._routines = {}
+        self._input_vars_by_addr = collections.defaultdict(list)
+        self._routines_by_page = collections.defaultdict(list)
+        self._routines_by_page_trigger = collections.defaultdict(list)
         self._is_printing = False
         self._print_progress = 0
         self._print_start_time = -1
@@ -293,12 +306,15 @@ class T5UID1:
                 raise self.printer.config_error("t5uid1_var '%s' already"
                                                 " exists" % (v.name,))
             self._vars[v.name] = v
+            if v.type == "input":
+                self._input_vars_by_addr[v.address].append(v)
         for c in p_list:
             p = page.T5UID1_Page(self._vars.keys(), c)
             if p.name in self._pages:
                 raise self.printer.config_error("t5uid1_page '%s' already"
                                                 " exists" % (p.name,))
             self._pages[p.name] = p
+            self._page_id_to_name[p.id] = p.name
             if p.is_boot:
                 if self._boot_page is None:
                     self._boot_page = p.name
@@ -326,6 +342,9 @@ class T5UID1:
                 raise self.printer.config_error("t5uid1_routine '%s' already"
                                                 " exists" % (r.name,))
             self._routines[r.name] = r
+            if r.page is not None:
+                self._routines_by_page[r.page].append(r)
+                self._routines_by_page_trigger[(r.page, r.trigger)].append(r)
 
     def _build_config(self):
         timeout_command, timeout_data = self.switch_page(self._timeout_page,
@@ -458,20 +477,17 @@ class T5UID1:
             self._gui_version = data[0]
             self._os_version = data[1]
             return
-        handled = False
-        for name in self._vars:
-            if (self._vars[name].address != address
-                or self._vars[name].type != "input"):
-                continue
-            handled = True
+        matching_vars = self._input_vars_by_addr.get(address)
+        if not matching_vars:
+            logging.warning("Received unhandled T5UID1 message for address %s",
+                            hex(address))
+            return
+        for var_obj in matching_vars:
             try:
-                self._vars[name].data_received(data)
+                var_obj.data_received(data)
             except Exception as e:
                 logging.exception("Unhandled exception in '%s' receive"
-                                  " handler: %s", name, str(e))
-        if not handled:
-            logging.warning("Received unhandled T5UID1 message for address %s",
-                         hex(address))
+                                  " handler: %s", var_obj.name, str(e))
 
     def send_var(self, name):
         if name not in self._vars:
@@ -480,11 +496,11 @@ class T5UID1:
                                          self._vars[name].prepare_data())
 
     def page_name(self, page_id):
-        if type(page_id) is not int:
+        if not isinstance(page_id, int):
             page_id = int(page_id)
-        for name in self._pages:
-            if self._pages[name].id == page_id:
-                return name
+        name = self._page_id_to_name.get(page_id)
+        if name is not None:
+            return name
         raise Exception("T5UID1_Page %d not found" % (page_id,))
 
     def send_page_vars(self, page=None, complete=False):
@@ -520,23 +536,14 @@ class T5UID1:
     def _start_page_routines(self, page, trigger):
         if page not in self._pages:
             raise Exception("T5UID1_Page '%s' not found" % (page,))
-        results = []
-        for routine in self._routines:
-            if (self._routines[routine].page != page
-                or self._routines[routine].trigger != trigger):
-                continue
-            result = self._routines[routine].run()
-            if result is not None:
-                results.append(result)
-        return all(results)
+        results = [r.run() for r in self._routines_by_page_trigger.get((page, trigger), ())]
+        return all(r for r in results if r is not None)
 
     def _stop_page_routines(self, page):
         if page not in self._pages:
             raise Exception("T5UID1_Page '%s' not found" % (page,))
-        for routine in self._routines:
-            if self._routines[routine].page != page:
-                continue
-            self._routines[routine].stop()
+        for r in self._routines_by_page.get(page, ()):
+            r.stop()
 
     class sentinel: pass
 
@@ -622,26 +629,26 @@ class T5UID1:
                                       curtime + TIMEOUT_SECS - 2)
 
     def t5uid1_command_write(self, address, data, send=True):
-        if address < 0 or address > 0xffff:
+        if not (0 <= address <= 0xffff):
             raise ValueError("invalid address")
-        if type(data) is not bytearray:
+        if not isinstance(data, (bytearray, bytes)):
             raise ValueError("invalid data")
-        if len(data) < 1 or len(data) > 64 or len(data) % 2 != 0:
+        if not (1 <= len(data) <= 64 and len(data) % 2 == 0):
             raise ValueError("invalid data length")
         command = T5UID1_CMD_WRITEVAR
-        command_data = bytearray([ (address >> 8), (address & 0xff) ])
+        command_data = bytearray([address >> 8, address & 0xff])
         command_data.extend(data)
         if not send:
             return (command, command_data)
         self._t5uid1_write(command, command_data)
 
     def t5uid1_command_read(self, address, wlen, send=True):
-        if address < 0 or address > 0xffff:
+        if not (0 <= address <= 0xffff):
             raise ValueError("invalid address")
-        if wlen < 1 or wlen > 0x7d:
+        if not (1 <= wlen <= 0x7d):
             raise ValueError("invalid wlen")
         command = T5UID1_CMD_READVAR
-        command_data = bytearray([ (address >> 8), (address & 0xff), wlen ])
+        command_data = bytearray([address >> 8, address & 0xff, wlen])
         if not send:
             return (command, command_data)
         self._t5uid1_write(command, command_data)
@@ -780,18 +787,10 @@ class T5UID1:
                 count = len(self.probe.probe_session.results)
         except Exception:
             count = 0
-        points_map = [ 0,  1,  2,  3,  4,
-                       9,  8,  7,  6,  5,
-                      10, 11, 12, 13, 14,
-                      19, 18, 17, 16, 15,
-                      20, 21, 22, 23, 24]
         res = 0
-        for i in range(25):
-            if count > points_map[i]:
-                if i < 16:
-                    res |= 1 << (i + 16)
-                else:
-                    res |= 1 << (i - 16)
+        for i, pt in enumerate(PROBED_MATRIX_POINTS):
+            if count > pt:
+                res |= 1 << (i + 16 if i < 16 else i - 16)
         return res
 
     def pid_param(self, heater, param):

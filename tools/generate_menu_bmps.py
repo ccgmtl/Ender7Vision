@@ -26,17 +26,23 @@ Coordinates carefully align with DWIN DGUS II text displays (14ShowFile.bin)
 and touch bounding boxes (13TouchFile.bin).
 """
 
+import functools
 import os
 from PIL import Image, ImageDraw, ImageFont
 
-OUT_DIR = "/home/cedric/ender7vision/tools/raw_480x272_bmps"
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+OUT_DIR = os.path.join(REPO_ROOT, "tools", "raw_480x272_bmps")
 os.makedirs(OUT_DIR, exist_ok=True)
 
 # Fonts
 FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 FONT_REG = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 
-def get_font(path, size):
+@functools.lru_cache(maxsize=32)
+def get_font(path: str, size: int) -> ImageFont.ImageFont:
+    """
+    Cached font loader to avoid repetitive disk I/O and parsing during bulk menu rendering.
+    """
     try:
         return ImageFont.truetype(path, size)
     except Exception:

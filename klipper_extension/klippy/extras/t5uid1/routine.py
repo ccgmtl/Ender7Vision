@@ -4,12 +4,12 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
-TRIGGERS = [
+TRIGGERS = frozenset([
     "enter_pre",
     "enter",
     "leave",
     "manual"
-]
+])
 
 class T5UID1_Routine:
     def __init__(self, gcode_macro, context, page_names, config):

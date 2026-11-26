@@ -20,19 +20,20 @@ class T5UID1_Page:
         self.var_auto = []
         self.var = []
 
+        var_names_set = set(var_names)
         for var in config.get('var_auto', '').split(','):
             var = var.strip()
-            if len(var) > 0 and var not in self.var_auto:
-                if var not in var_names:
+            if var and var not in self.var_auto:
+                if var not in var_names_set:
                     raise config.error("Invalid var '%s' in section '%s'"
                                        % (var, config.get_name()))
                 self.var_auto.append(var)
 
+        auto_set = set(self.var_auto)
         for var in config.get('var', '').split(','):
             var = var.strip()
-            if (len(var) > 0
-                and var not in self.var_auto and var not in self.var):
-                if var not in var_names:
+            if var and var not in auto_set and var not in self.var:
+                if var not in var_names_set:
                     raise config.error("Invalid var '%s' in section '%s'"
                                        % (var, config.get_name()))
                 self.var.append(var)

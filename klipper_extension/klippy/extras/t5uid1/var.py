@@ -41,9 +41,9 @@ class T5UID1_Var:
         address = config.get('address')
         try:
             self.address = int(address, 16)
-            if self.address < 0x1000 or self.address > 0xffff:
-                raise
-        except:
+            if not (0x1000 <= self.address <= 0xffff):
+                raise ValueError("address out of range")
+        except (ValueError, TypeError):
             raise config.error("Invalid address '%s' in section '%s'"
                                % (address, config.get_name()))
 
@@ -91,23 +91,20 @@ class T5UID1_Var:
         if self.data_type != "none" and self.data_len != 0:
             received_len = len(data)
             if self.data_type == "str":
-                buf = bytearray()
-                for i in range(received_len):
-                    if i >= self.data_len:
-                        break
-                    if data[i] == 0x00:
-                        break
-                    if (i + 1 < received_len
-                        and data[i] == 0xff and data[i + 1] == 0xff):
-                        break
-                    buf.append(data[i])
-                data = str(buf.decode('ascii'))
+                raw = bytes(data[:min(received_len, self.data_len)])
+                null_pos = raw.find(b'\x00')
+                if null_pos != -1:
+                    raw = raw[:null_pos]
+                ff_pos = raw.find(b'\xff\xff')
+                if ff_pos != -1:
+                    raw = raw[:ff_pos]
+                parsed_data = raw.decode('ascii', errors='replace')
             elif received_len != self.data_len:
                 raise ValueError("Expected %d bytes, got %d"
                                  % (self.data_len, received_len))
             else:
-                data = struct.unpack(TYPES_FMT[self.data_type], data)[0]
-            context.update({ 'data': data })
+                parsed_data = struct.unpack(TYPES_FMT[self.data_type], data)[0]
+            context.update({'data': parsed_data})
 
         result = self._template.render(context).strip()
         if self.run_as_gcode and len(result) > 0:
@@ -122,31 +119,20 @@ class T5UID1_Var:
         result = self._template.render(context)
 
         if self.data_type == "str":
-            result = bytearray(result.replace('\n', ''), "ascii")
-            target_len = self.data_len
-            if target_len % 2 != 0:
-                target_len += 1
-            extra_bytes = len(result) - target_len
-            if extra_bytes > 0:
-                result = result[:target_len]
-            elif extra_bytes < 0:
-                result.extend([0] * abs(extra_bytes))
-        else:
-            parts = result.strip().split(',')
-            result = bytearray()
-            count = 0
-            for part in parts:
-                part = part.strip()
-                if len(part) == 0:
-                    continue
-                if self.data_type == "float":
-                    part = float(part)
-                else:
-                    part = int(part)
-                result.extend(struct.pack(TYPES_FMT[self.data_type], part))
-                count += 1
-            if count != self.array_len:
-                raise ValueError("Expected %d values, got %d"
-                                 % (self.array_len, count))
+            raw_bytes = result.replace('\n', '').encode('ascii', errors='replace')
+            target_len = self.data_len if self.data_len % 2 == 0 else self.data_len + 1
+            if len(raw_bytes) > target_len:
+                return bytearray(raw_bytes[:target_len])
+            return bytearray(raw_bytes.ljust(target_len, b'\x00'))
 
-        return result
+        parts = [p.strip() for p in result.strip().split(',') if p.strip()]
+        if len(parts) != self.array_len:
+            raise ValueError("Expected %d values, got %d"
+                             % (self.array_len, len(parts)))
+
+        fmt = TYPES_FMT[self.data_type]
+        converter = float if self.data_type == "float" else int
+        res = bytearray()
+        for part in parts:
+            res.extend(struct.pack(fmt, converter(part)))
+        return res

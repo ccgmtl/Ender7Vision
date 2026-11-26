@@ -16,27 +16,36 @@ import os
 import subprocess
 import struct
 
-TOUCH_FILE = "/home/cedric/ender7vision/DWIN_SET/13TouchFile.bin"
+# Resolve repo root dynamically so script works portably across any environment
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+TOUCH_FILE = os.path.join(REPO_ROOT, "DWIN_SET", "13TouchFile.bin")
 
-def make_touch_record(page, x1, y1, x2, y2, vp, val, ctrl_type=0x05):
-    # Standard 32-byte DGUS II Return Key Code record
+STRUCT_HDR = struct.Struct(">HHHHH")
+STRUCT_U16 = struct.Struct(">H")
+
+def make_touch_record(page: int, x1: int, y1: int, x2: int, y2: int, vp: int, val: int, ctrl_type: int = 0x05) -> bytes:
+    """
+    Creates a standard 32-byte DGUS II Return Key Code (or custom) touch control record.
+    """
     rec = bytearray(32)
-    struct.pack_into(">HHHHH", rec, 0, page, x1, y1, x2, y2)
+    STRUCT_HDR.pack_into(rec, 0, page, x1, y1, x2, y2)
     rec[10:14] = b"\xff\x00\xff\x00"
     rec[14] = 0xfe
     rec[15] = ctrl_type
     rec[16] = 0xfe
-    struct.pack_into(">H", rec, 17, vp)
+    STRUCT_U16.pack_into(rec, 17, vp)
     rec[19] = 0x00
-    struct.pack_into(">H", rec, 20, val)
+    STRUCT_U16.pack_into(rec, 20, val)
     return bytes(rec)
 
-def get_pristine_touch_data():
-    # If /tmp/orig_touch.bin exists, use it; otherwise extract from git v1.1.0
+def get_pristine_touch_data() -> bytes:
+    """
+    Retrieves the pristine baseline touch file, either from /tmp or extracted from git tag v1.1.0.
+    """
     if os.path.exists("/tmp/orig_touch.bin"):
         with open("/tmp/orig_touch.bin", "rb") as f:
             return f.read()
-    res = subprocess.run(["git", "show", "v1.1.0:DWIN_SET/13TouchFile.bin"], cwd="/home/cedric/ender7vision", capture_output=True, check=True)
+    res = subprocess.run(["git", "show", "v1.1.0:DWIN_SET/13TouchFile.bin"], cwd=REPO_ROOT, capture_output=True, check=True)
     return res.stdout
 
 def update_touch_file():

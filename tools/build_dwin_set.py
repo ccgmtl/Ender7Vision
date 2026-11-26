@@ -19,7 +19,8 @@ def crc16_modbus(data: bytes) -> int:
 
 def build_screens_icl(bmp_dir: str, out_icl_path: str, version_tag: str = "v2.3.0-LS"):
     boot_src = os.path.join(bmp_dir, "000_boot.bmp")
-    img = Image.open(boot_src).convert("RGB")
+    with Image.open(boot_src) as base_boot:
+        img = base_boot.convert("RGB")
     draw = ImageDraw.Draw(img)
     now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     stamp_text = f"Ender 7 DGUS-Reloaded {version_tag} | {now_str}"
@@ -32,22 +33,29 @@ def build_screens_icl(bmp_dir: str, out_icl_path: str, version_tag: str = "v2.3.
     x, y = (480 - text_w) // 2, 272 - text_h - 12
     draw.rectangle([x - 10, y - 5, x + text_w + 10, y + text_h + 5], fill=(0, 0, 0), outline=(0, 255, 255), width=1)
     draw.text((x, y - 2), stamp_text, fill=(0, 255, 255), font=font)
-    stamped_boot_path = "/tmp/stamped_000_boot.bmp"
-    img.save(stamped_boot_path, format="BMP")
 
     bmp_files = glob.glob(os.path.join(bmp_dir, "*.bmp"))
     images_by_idx = {}
     for path in bmp_files:
         idx = int(os.path.basename(path).split("_")[0])
-        images_by_idx[idx] = stamped_boot_path if idx == 0 else path
+        images_by_idx[idx] = img if idx == 0 else path
 
     jpegs_by_idx = {}
-    for idx, path in sorted(images_by_idx.items()):
-        im = Image.open(path)
-        assert im.size == (480, 272), f"Expected 480x272, got {im.size} for {path}"
-        buf = io.BytesIO()
-        im.save(buf, format="JPEG", quality=95, subsampling="4:2:0")
-        jpegs_by_idx[idx] = (im.size, buf.getvalue())
+    for idx, item in sorted(images_by_idx.items()):
+        if isinstance(item, Image.Image):
+            im = item
+            should_close = False
+        else:
+            im = Image.open(item)
+            should_close = True
+        try:
+            assert im.size == (480, 272), f"Expected 480x272, got {im.size} for index {idx}"
+            buf = io.BytesIO()
+            im.save(buf, format="JPEG", quality=95, subsampling="4:2:0")
+            jpegs_by_idx[idx] = (im.size, buf.getvalue())
+        finally:
+            if should_close:
+                im.close()
 
     max_idx = max(jpegs_by_idx.keys())
     pointer_table_size = (max_idx + 1) * 4
