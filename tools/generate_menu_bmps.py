@@ -944,6 +944,236 @@ def generate_macros_menu(out_path):
     img.save(out_path)
     print(f"Generated {out_path}")
 
+# ==============================================================================
+# SCREEN 2: 002_print_status.bmp (Active Print Status & Mini-Bed Wireframe)
+# ==============================================================================
+def generate_print_status(out_path):
+    img = Image.new("RGB", (480, 272), BG_COLOR)
+    draw = ImageDraw.Draw(img)
+    
+    # Header: Ender-7 logo badge, title strictly before X=120
+    draw_header(draw, "ENDER-7", back_target=None)
+    
+    # --- Extruder Card (14, 46, 175, 90) ---
+    draw_card(draw, (14, 46, 175, 90), (0, 180, 220), CARD_BG, radius=6, width=1)
+    draw.text((22, 50), "EXTRUDER", fill=(0, 210, 255), font=get_font(FONT_BOLD, 9))
+    draw.text((22, 62), "ACT / TGT °C", fill=TEXT_MUTED, font=get_font(FONT_REG, 8))
+    # 14ShowFile prints current at (79, 54), target at (123, 54)
+    draw.text((106, 54), "/", fill=(100, 120, 140), font=get_font(FONT_BOLD, 11))
+    
+    # --- Bed Card (14, 96, 175, 140) ---
+    draw_card(draw, (14, 96, 175, 140), (245, 158, 11), CARD_BG, radius=6, width=1)
+    draw.text((22, 100), "HEATED BED", fill=(245, 158, 11), font=get_font(FONT_BOLD, 9))
+    draw.text((22, 112), "ACT / TGT °C", fill=TEXT_MUTED, font=get_font(FONT_REG, 8))
+    # 14ShowFile prints current at (79, 100), target at (123, 100)
+    draw.text((106, 100), "/", fill=(100, 120, 140), font=get_font(FONT_BOLD, 11))
+    
+    # --- Z-Height Card (185, 46, 320, 90) ---
+    draw_card(draw, (185, 46, 320, 90), CARD_BORDER, CARD_BG, radius=6, width=1)
+    draw.text((195, 52), "Z-HEIGHT", fill=TEXT_PRIMARY, font=get_font(FONT_BOLD, 9))
+    draw.text((195, 68), "POSITION (MM)", fill=TEXT_MUTED, font=get_font(FONT_REG, 8))
+    # 14ShowFile prints live Z at (295, 54)
+    draw.text((276, 54), "Z:", fill=(0, 210, 255), font=get_font(FONT_BOLD, 10))
+    
+    # --- Elapsed Time Card (185, 96, 320, 140) ---
+    draw_card(draw, (185, 96, 320, 140), CARD_BORDER, CARD_BG, radius=6, width=1)
+    draw.text((195, 102), "ELAPSED", fill=TEXT_PRIMARY, font=get_font(FONT_BOLD, 9))
+    draw.text((195, 118), "PRINT TIME", fill=TEXT_MUTED, font=get_font(FONT_REG, 8))
+    # 14ShowFile prints time at (295, 101)
+    draw.text((276, 101), "T:", fill=(16, 185, 129), font=get_font(FONT_BOLD, 10))
+
+    # --- Option A: Dynamic Mini-Bed Wireframe Container (330, 46, 466, 140) ---
+    draw_card(draw, (330, 46, 466, 140), (0, 210, 255), (14, 20, 30), radius=6, width=1)
+    draw.text((338, 50), "COREXY BED", fill=(0, 210, 255), font=get_font(FONT_BOLD, 8))
+    draw.text((338, 62), "250x250mm", fill=TEXT_MUTED, font=get_font(FONT_REG, 7))
+    
+    # Mini-bed representation (grid box 388, 52 to 458, 122 -> 70x70 px)
+    grid_x1, grid_y1, grid_x2, grid_y2 = 388, 52, 458, 122
+    draw.rectangle([grid_x1, grid_y1, grid_x2, grid_y2], fill=(18, 26, 38), outline=(45, 65, 95), width=1)
+    # Subtle interior grid lines
+    gx_mid = (grid_x1 + grid_x2) // 2
+    gy_mid = (grid_y1 + grid_y2) // 2
+    draw.line([(gx_mid, grid_y1), (gx_mid, grid_y2)], fill=(32, 48, 70), width=1)
+    draw.line([(grid_x1, gy_mid), (grid_x2, gy_mid)], fill=(32, 48, 70), width=1)
+    # Origin (0, 0) badge
+    draw.text((grid_x1 - 1, grid_y2 - 7), "0,0", fill=(100, 120, 150), font=get_font(FONT_REG, 6))
+    # CoreXY live nozzle crosshair target at center
+    draw.ellipse([gx_mid - 4, gy_mid - 4, gx_mid + 4, gy_mid + 4], outline=(0, 255, 230), width=1)
+    draw.point((gx_mid, gy_mid), fill=(255, 255, 255))
+    draw.text((338, 124), "LIVE TOOLHEAD", fill=(52, 211, 153), font=get_font(FONT_REG, 7))
+
+    # --- Print Progress Deck (14, 146, 466, 212) ---
+    draw_card(draw, (14, 146, 466, 212), CARD_BORDER, CARD_BG, radius=6, width=1)
+    draw.text((26, 152), "PRINT PROGRESS", fill=TEXT_PRIMARY, font=get_font(FONT_BOLD, 9))
+    # 14ShowFile prints percentage at (215, 154)
+    draw.text((246, 154), "%", fill=(0, 210, 255), font=get_font(FONT_BOLD, 10))
+    draw.text((350, 152), "STATUS: ACTIVE", fill=(52, 211, 153), font=get_font(FONT_BOLD, 8))
+    
+    # Progress Bar Track (24, 172, 456, 198)
+    draw.rounded_rectangle([24, 172, 456, 198], radius=6, fill=(16, 20, 28), outline=(40, 52, 70), width=1)
+    # 14ShowFile animates progress fill inside at (31, 177) and (241, 177)
+    
+    # --- Bottom Action Bar (13, 222, 466, 258) ---
+    # Button 1: STOP (13, 222, 123, 258)
+    draw_card(draw, (13, 222, 123, 258), (244, 63, 94), (44, 22, 30), radius=6, width=1)
+    draw.text((68, 240), "■ STOP", fill=(251, 113, 133), font=get_font(FONT_BOLD, 11), anchor="mm")
+    
+    # Button 2: PAUSE (128, 222, 238, 258)
+    draw_card(draw, (128, 222, 238, 258), (245, 158, 11), (44, 32, 20), radius=6, width=1)
+    draw.text((183, 240), "❚❚ PAUSE", fill=(251, 191, 36), font=get_font(FONT_BOLD, 11), anchor="mm")
+    
+    # Button 3: RESUME (242, 222, 352, 258)
+    draw_card(draw, (242, 222, 352, 258), (16, 185, 129), (20, 36, 32), radius=6, width=1)
+    draw.text((297, 240), "▶ RESUME", fill=(52, 211, 153), font=get_font(FONT_BOLD, 11), anchor="mm")
+    
+    # Button 4: TUNE (356, 222, 466, 258)
+    draw_card(draw, (356, 222, 466, 258), (0, 210, 255), (20, 34, 46), radius=6, width=1)
+    draw.text((411, 240), "⚙ TUNE", fill=(0, 210, 255), font=get_font(FONT_BOLD, 11), anchor="mm")
+
+    img.save(out_path)
+    print(f"Generated {out_path}")
+
+# ==============================================================================
+# SCREEN 3: 003_print_adjust.bmp (In-Print Tuning Dashboard)
+# ==============================================================================
+def generate_print_adjust(out_path):
+    img = Image.new("RGB", (480, 272), BG_COLOR)
+    draw = ImageDraw.Draw(img)
+    
+    draw_header(draw, "PRINT TUNING", back_target="STATUS")
+    
+    # Row 1: Extruder Target (Left) & Feedrate (Right)
+    # Extruder Target: (14, 46, 232, 96)
+    draw_card(draw, (14, 46, 232, 96), (0, 180, 220), CARD_BG, radius=6, width=1)
+    draw.text((22, 54), "NOZZLE TARGET", fill=(0, 210, 255), font=get_font(FONT_BOLD, 9))
+    draw.text((22, 70), "TEMP (°C)", fill=TEXT_MUTED, font=get_font(FONT_REG, 8))
+    draw.rounded_rectangle([155, 56, 224, 88], radius=4, fill=(30, 40, 56), outline=(0, 180, 220), width=1)
+    # 14ShowFile prints target at (186, 71)
+    
+    # Feedrate (Speed %): (248, 46, 466, 96)
+    draw_card(draw, (248, 46, 466, 96), (16, 185, 129), CARD_BG, radius=6, width=1)
+    draw.text((256, 54), "PRINT SPEED", fill=(52, 211, 153), font=get_font(FONT_BOLD, 9))
+    draw.text((256, 70), "FEEDRATE (%)", fill=TEXT_MUTED, font=get_font(FONT_REG, 8))
+    draw.rounded_rectangle([372, 56, 442, 88], radius=4, fill=(30, 40, 56), outline=(16, 185, 129), width=1)
+    # 14ShowFile prints speed at (397, 71)
+    
+    # Row 2: Bed Target (Left) & Flowrate (Right)
+    # Bed Target: (14, 102, 232, 152)
+    draw_card(draw, (14, 102, 232, 152), (245, 158, 11), CARD_BG, radius=6, width=1)
+    draw.text((22, 110), "BED TARGET", fill=(245, 158, 11), font=get_font(FONT_BOLD, 9))
+    draw.text((22, 126), "TEMP (°C)", fill=TEXT_MUTED, font=get_font(FONT_REG, 8))
+    draw.rounded_rectangle([155, 112, 224, 144], radius=4, fill=(30, 40, 56), outline=(245, 158, 11), width=1)
+    # 14ShowFile prints bed target at (186, 122)
+    
+    # Flowrate (%): (248, 102, 466, 152)
+    draw_card(draw, (248, 102, 466, 152), (168, 85, 247), CARD_BG, radius=6, width=1)
+    draw.text((256, 110), "FLOW RATE", fill=(192, 132, 252), font=get_font(FONT_BOLD, 9))
+    draw.text((256, 126), "EXTRUSION (%)", fill=TEXT_MUTED, font=get_font(FONT_REG, 8))
+    draw.rounded_rectangle([372, 112, 442, 144], radius=4, fill=(30, 40, 56), outline=(168, 85, 247), width=1)
+    # 14ShowFile prints flow at (397, 122)
+    
+    # Row 3: Part Fan PWM (Left) & Z-Offset Baby Step (Right)
+    # Fan: (14, 158, 232, 208)
+    draw_card(draw, (14, 158, 232, 208), (59, 130, 246), CARD_BG, radius=6, width=1)
+    draw.text((22, 166), "COOLING FAN", fill=(96, 165, 250), font=get_font(FONT_BOLD, 9))
+    draw.text((22, 182), "SPEED (%)", fill=TEXT_MUTED, font=get_font(FONT_REG, 8))
+    draw.rounded_rectangle([155, 168, 224, 200], radius=4, fill=(30, 40, 56), outline=(59, 130, 246), width=1)
+    # 14ShowFile prints fan at (186, 198)
+    
+    # Z-Offset Baby Step: (248, 158, 466, 258)
+    draw_card(draw, (248, 158, 466, 258), (244, 63, 94), CARD_BG, radius=6, width=1)
+    draw.text((256, 166), "Z-OFFSET", fill=(251, 113, 133), font=get_font(FONT_BOLD, 9))
+    draw.text((256, 182), "BABYSTEP (MM)", fill=TEXT_MUTED, font=get_font(FONT_REG, 8))
+    # Value display box: 14ShowFile prints offset at (387, 198)
+    draw.rounded_rectangle([256, 202, 360, 246], radius=6, fill=(30, 40, 56), outline=(244, 63, 94), width=1)
+    draw.text((264, 218), "Z:", fill=(251, 113, 133), font=get_font(FONT_BOLD, 10))
+    
+    # Baby step [-] button (385, 158, 434, 190)
+    draw.rounded_rectangle([385, 158, 434, 190], radius=6, fill=(44, 22, 30), outline=(244, 63, 94), width=1)
+    draw.text((409, 174), "▼ -", fill=(251, 113, 133), font=get_font(FONT_BOLD, 11), anchor="mm")
+    
+    # Baby step [+] button (385, 223, 434, 255)
+    draw.rounded_rectangle([385, 223, 434, 255], radius=6, fill=(20, 36, 32), outline=(16, 185, 129), width=1)
+    draw.text((409, 239), "▲ +", fill=(52, 211, 153), font=get_font(FONT_BOLD, 11), anchor="mm")
+    
+    # Helper hint at bottom left
+    draw.text((22, 230), "TAP VALUE BOXES TO ENTER TARGETS VIA NUMPAD", fill=TEXT_HINT, font=get_font(FONT_REG, 7))
+
+    img.save(out_path)
+    print(f"Generated {out_path}")
+
+# ==============================================================================
+# SCREEN 4: 004_print_finished.bmp (Print Complete Celebration Screen)
+# ==============================================================================
+def generate_print_finished(out_path):
+    img = Image.new("RGB", (480, 272), BG_COLOR)
+    draw = ImageDraw.Draw(img)
+    
+    draw_header(draw, "PRINT FINISHED", back_target=None)
+    
+    # Celebration Banner Card (14, 46, 466, 140)
+    draw_card(draw, (14, 46, 466, 140), (16, 185, 129), (16, 28, 24), radius=8, width=1)
+    # Checkmark circle badge
+    draw.ellipse([34, 66, 78, 110], fill=(16, 185, 129), outline=(52, 211, 153), width=2)
+    draw.text((56, 88), "✔", fill=(255, 255, 255), font=get_font(FONT_BOLD, 20), anchor="mm")
+    
+    draw.text((95, 64), "PRINTING FINISHED SUCCESSFULLY", fill=(52, 211, 153), font=get_font(FONT_BOLD, 13))
+    draw.text((95, 86), "Extruder and Bed heaters cooled down safely.", fill=TEXT_PRIMARY, font=get_font(FONT_REG, 9))
+    draw.text((95, 102), "CoreXY steppers parked at completion position.", fill=TEXT_MUTED, font=get_font(FONT_REG, 8))
+    
+    # Summary Deck (14, 146, 466, 212)
+    draw_card(draw, (14, 146, 466, 212), CARD_BORDER, CARD_BG, radius=6, width=1)
+    draw.text((26, 152), "TOTAL DURATION", fill=TEXT_MUTED, font=get_font(FONT_REG, 8))
+    # 14ShowFile prints time at (295, 101) - in finished screen it also uses 30e7
+    draw.text((26, 172), "FINAL Z-HEIGHT", fill=TEXT_MUTED, font=get_font(FONT_REG, 8))
+    draw.text((246, 152), "COMPLETION: 100%", fill=(52, 211, 153), font=get_font(FONT_BOLD, 9))
+    draw.text((246, 172), "STATUS: READY FOR REMOVAL", fill=(0, 210, 255), font=get_font(FONT_REG, 8))
+    
+    # Return Home Button (185, 222, 295, 258)
+    draw_card(draw, (185, 222, 295, 258), (0, 210, 255), (20, 34, 46), radius=6, width=1)
+    draw.text((240, 240), "⌂ HOME", fill=(0, 210, 255), font=get_font(FONT_BOLD, 12), anchor="mm")
+
+    img.save(out_path)
+    print(f"Generated {out_path}")
+
+# ==============================================================================
+# MODAL POPUPS: 204, 206, 208, 212 (Abort, Pause, Resume, Steppers)
+# ==============================================================================
+def generate_popup_dialog(out_path, title, message, ok_text, ok_color, selected=False):
+    # Dimmed translucent backdrop
+    img = Image.new("RGB", (480, 272), (12, 15, 20))
+    draw = ImageDraw.Draw(img)
+    
+    # Floating Glassmorphic Dialog Container (70, 48, 410, 214)
+    dialog_border = ok_color if selected else (60, 80, 110)
+    draw_card(draw, (70, 48, 410, 214), dialog_border, (22, 28, 38), radius=10, width=2)
+    
+    # Dialog Title Bar (70, 48, 410, 86)
+    draw.rounded_rectangle([70, 48, 410, 86], radius=10, fill=(28, 36, 50), outline=dialog_border, width=1)
+    # Fill bottom corners of title bar so it merges seamlessly into dialog body
+    draw.rectangle([71, 74, 409, 86], fill=(28, 36, 50))
+    draw.line([(70, 86), (410, 86)], fill=(50, 68, 92), width=1)
+    
+    # Title badge & text
+    draw.rounded_rectangle([86, 57, 100, 77], radius=3, fill=ok_color)
+    draw.text((110, 67), title, fill=TEXT_PRIMARY, font=get_font(FONT_BOLD, 12), anchor="lm")
+    
+    # Message Body
+    draw.text((240, 118), message, fill=(210, 225, 245), font=get_font(FONT_REG, 10), anchor="mm")
+    
+    # Cancel Button (129, 155, 230, 191)
+    draw_card(draw, (129, 155, 230, 191), (70, 85, 110), (30, 38, 50), radius=6, width=1)
+    draw.text((179, 173), "CANCEL", fill=TEXT_MUTED, font=get_font(FONT_BOLD, 10), anchor="mm")
+    
+    # Confirm / OK Button (249, 155, 350, 191)
+    btn_fill = ok_color if selected else (ok_color[0] // 4, ok_color[1] // 4, ok_color[2] // 4)
+    btn_text_color = (255, 255, 255) if selected else ok_color
+    draw_card(draw, (249, 155, 350, 191), ok_color, btn_fill, radius=6, width=2 if selected else 1)
+    draw.text((299, 173), ok_text, fill=btn_text_color, font=get_font(FONT_BOLD, 10), anchor="mm")
+    
+    img.save(out_path)
+    print(f"Generated {out_path}")
+
 def main():
     print("Rendering updated Ender7Vision menus with unified visual signature...")
     generate_home_menu(os.path.join(OUT_DIR, "001_home.bmp"))
@@ -964,7 +1194,23 @@ def main():
     generate_pid_menu(os.path.join(OUT_DIR, "019_pid.bmp"))
     generate_info_menu(os.path.join(OUT_DIR, "020_information.bmp"))
     generate_macros_menu(os.path.join(OUT_DIR, "021_macros_menu.bmp"))
-    print("All 18 menu screens generated successfully with unified visual signature!")
+    
+    # Printing flow screens
+    generate_print_status(os.path.join(OUT_DIR, "002_print_status.bmp"))
+    generate_print_adjust(os.path.join(OUT_DIR, "003_print_adjust.bmp"))
+    generate_print_finished(os.path.join(OUT_DIR, "004_print_finished.bmp"))
+    
+    # Modal popups and pressed states
+    generate_popup_dialog(os.path.join(OUT_DIR, "204_popup_abort.bmp"), "ABORT PRINT?", "Are you sure you want to abort the current print?", "ABORT", (244, 63, 94), selected=False)
+    generate_popup_dialog(os.path.join(OUT_DIR, "205_popup_abort_sel.bmp"), "ABORT PRINT?", "Are you sure you want to abort the current print?", "ABORT", (244, 63, 94), selected=True)
+    generate_popup_dialog(os.path.join(OUT_DIR, "206_popup_pause.bmp"), "PAUSE PRINT?", "Pause the ongoing print job?", "PAUSE", (245, 158, 11), selected=False)
+    generate_popup_dialog(os.path.join(OUT_DIR, "207_popup_pause_sel.bmp"), "PAUSE PRINT?", "Pause the ongoing print job?", "PAUSE", (245, 158, 11), selected=True)
+    generate_popup_dialog(os.path.join(OUT_DIR, "208_popup_resume.bmp"), "RESUME PRINT?", "Resume printing from paused position?", "RESUME", (16, 185, 129), selected=False)
+    generate_popup_dialog(os.path.join(OUT_DIR, "209_popup_resume_sel.bmp"), "RESUME PRINT?", "Resume printing from paused position?", "RESUME", (16, 185, 129), selected=True)
+    generate_popup_dialog(os.path.join(OUT_DIR, "212_popup_steppers.bmp"), "UNLOCK STEPPERS?", "Disable XYZE stepper motor holding torque?", "UNLOCK", (239, 68, 68), selected=False)
+    generate_popup_dialog(os.path.join(OUT_DIR, "213_popup_steppers_sel.bmp"), "UNLOCK STEPPERS?", "Disable XYZE stepper motor holding torque?", "UNLOCK", (239, 68, 68), selected=True)
+
+    print("All menu, printing, and popup screens generated successfully with unified visual signature!")
 
 if __name__ == "__main__":
     main()
